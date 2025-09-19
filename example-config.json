@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "gritql": {
+      "command": "node",
+      "args": ["./dist/index.js"],
+      "cwd": "/path/to/gritql-mcp",
+      "env": {}
+    }
+  }
+}
