@@ -1,19 +1,21 @@
 # GritQL MCP Server
 
-This project implements a local-only Python [FastMCP](https://gofastmcp.com/) server that exposes the capabilities of the [GritQL engine](https://docs.grit.io/) to MCP-compatible clients like the [Codex CLI](https://github.com/openai/codex).
+This project implements a local-only Python [FastMCP](https://gofastmcp.com/) server that exposes the capabilities of the [GritQL engine](https://docs.grit.io/) to MCP-compatible clients like the Gemini CLI.
 
-The server allows you to leverage GritQL for code searching and rewriting directly from your development environment, without relying on any cloud services or AI. All operations are performed locally.
+The server allows you to leverage GritQL for code searching and rewriting directly from your development environment. All operations are performed locally by shelling out to the `grit` command-line tool.
 
 ## Features
 
-The server exposes the following tools to the client:
+The server exposes the following tools to the client, acting as a wrapper around the `grit` CLI:
 
--   `library.search_patterns`: Search the local Grit pattern library for patterns and workflows.
--   `patterns.describe`: Get detailed metadata for a specific pattern.
--   `gritql.generate`: Deterministically generate a GritQL query from a natural language problem description (local-only, no AI).
--   `code.find`: Find code in your workspace that matches a GritQL query or a named pattern.
--   `code.dry_run`: See a summary of the changes a rewrite pattern would make without applying them.
--   `code.apply`: Apply a GritQL rewrite directly to your codebase.
+-   `library.search_patterns`: Lists available patterns by parsing the output of `grit patterns list` and `grit list`.
+-   `patterns.describe`: Shows metadata for a pattern by parsing the output of `grit patterns describe`.
+-   `gritql.generate`: Deterministically generates a GritQL query from a natural language problem description (local-only, no AI).
+-   `code.find`: Finds code matches using `grit check`. Returns the raw text output from the CLI.
+-   `code.dry_run`: Shows a diff of potential changes using `grit apply --dry-run`. Returns the raw text output.
+-   `code.apply`: Applies a rewrite to your codebase using `grit apply`. Returns the raw text output.
+
+**Note:** This server parses the human-readable output of the `grit` CLI, as the tool does not yet support structured (JSON) output for these commands.
 
 ## Prerequisites
 
@@ -21,29 +23,18 @@ Before you begin, ensure you have the following installed:
 
 1.  **Python** (3.8 or higher)
 2.  **uv**: Follow the official installation instructions at [astral.sh/uv](https://astral.sh/uv).
-    ```bash
-    # Recommended installation method
-    curl -LsSf https://astral.sh/uv/install.sh | sh
-    ```
 3.  **Grit CLI**: Follow the official installation instructions at [docs.grit.io/cli/quickstart](https://docs.grit.io/cli/quickstart).
-    ```bash
-    # Using npm
-    npm install --location=global @getgrit/cli
-    # Or using the install script
-    curl -fsSL https://docs.grit.io/install | bash
-    ```
-4.  **An MCP-compatible client** (e.g., Gemini CLI, Codex CLI).
+4.  **An MCP-compatible client** (e.g., Gemini CLI).
 
 ## Installation
 
-1.  **Clone the repository** (or download the source code):
+1.  **Clone the repository**:
     ```bash
     git clone <repository-url>
     cd gritql-mcp
     ```
 
-2.  **Install the Python dependencies**:
-    This project uses `uv` for package management.
+2.  **Install Python dependencies**:
     ```bash
     # Create and activate a virtual environment
     uv venv
@@ -53,17 +44,13 @@ Before you begin, ensure you have the following installed:
     uv pip install -e .
     ```
 
-## Integrations
+## Configuration
 
-This server uses the Model Context Protocol (MCP) to expose its tools.
-
-### Gemini CLI
-
-To make the server available to the Gemini CLI, you need to add it to your Gemini configuration file.
+To make the server available to the Gemini CLI, you need to add it to your configuration file.
 
 1.  Locate or create the config file at `~/.gemini/settings.json`.
 
-2.  Add the following to the `mcp_servers` list in the file, adjusting the paths as necessary:
+2.  Add the following to the `mcp_servers` list in the file:
 
     ```json
     {
@@ -73,29 +60,29 @@ To make the server available to the Gemini CLI, you need to add it to your Gemin
     }
     ```
 
-### OpenAI Codex and Claude
-
-To integrate with clients that use OpenAI's or Anthropic's function calling/tool use APIs, you would need to create a translation layer. This layer would:
-1.  Define the tools in the format required by the specific API (e.g., JSON schema for OpenAI).
-2.  Receive the function call request from the model.
-3.  Translate the request into an MCP call to this server.
-4.  Receive the MCP response and translate it back into the format expected by the model's API.
-
-This project does not include this translation layer out of the box.
+3.  **(Optional) If `grit` is not in your PATH:**
+    If the `grit` executable is not in a standard location, you can tell the server where to find it by adding a `GRIT_CLI_PATH` environment variable to your configuration:
+    ```json
+    {
+      "command": "python",
+      "args": ["-m", "server.main"],
+      "name": "gritql",
+      "env": {
+        "GRIT_CLI_PATH": "/path/to/your/grit-executable"
+      }
+    }
+    ```
 
 ## Usage
 
-Once configured, your MCP client will automatically start and connect to the server. You can then invoke the tools by describing what you want to do in a natural way.
+Once configured, your MCP client will automatically start and connect to the server. You can then invoke the tools by describing what you want to do.
 
 **Example (with Gemini CLI):**
 
-1.  Navigate to a directory within your allowed workspace.
-2.  Run the Gemini CLI:
-    ```bash
-    gemini
-    ```
+1.  Navigate to your workspace.
+2.  Run the Gemini CLI: `gemini`
 3.  Give it a prompt that triggers one of the tools:
-    > "Using the gritql tool, find all functions named 'my_function' in the current directory."
+    > "Using the gritql tool, find all functions named 'my_function'."
 
 The CLI will identify the appropriate tool (`code.find`), call the server, and display the results.
 
@@ -112,7 +99,7 @@ uv pip install -e .[dev]
 
 ### Running Tests
 
-The project uses `pytest` for unit and integration testing. To run the test suite:
+The project uses `pytest` for unit and integration testing. The test suite includes a full simulation of an MCP host to validate the server's behavior.
 ```bash
 pytest
 ```
@@ -121,34 +108,7 @@ pytest
 
 We use `ruff` for high-performance linting and code formatting.
 
--   **To check for linting errors:**
-    ```bash
-    ruff check .
-    ```
--   **To automatically fix linting errors:**
-    ```bash
-    ruff check --fix .
-    ```
--   **To check for formatting issues:**
-    ```bash
-    ruff format --check .
-    ```
--   **To reformat the code:**
-    ```bash
-    ruff format .
-    ```
-
-### CI Check Simulation
-
-To run all the checks that a Continuous Integration (CI) pipeline would, execute the following commands in order:
-
-```bash
-# 1. Check formatting
-ruff format --check .
-
-# 2. Check for linting errors
-ruff check .
-
-# 3. Run the test suite
-pytest
-```
+-   **Check for linting errors:** `ruff check .`
+-   **Automatically fix errors:** `ruff check --fix .`
+-   **Check formatting:** `ruff format --check .`
+-   **Reformat code:** `ruff format .`

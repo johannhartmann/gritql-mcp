@@ -1,7 +1,5 @@
-from server.mcp_instance import mcp
-
 # Import handlers to register the tools via decorators
-from server.handlers import apply, dry_run, find, generate, library
+from server.mcp_instance import mcp
 
 
 def main():

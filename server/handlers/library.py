@@ -1,7 +1,8 @@
-import subprocess
 import os
+import subprocess
 
 from server.mcp_instance import mcp
+
 
 def get_grit_cli_path():
     """Returns the path to the grit CLI executable."""
@@ -23,7 +24,7 @@ def search_patterns(query: str, language: str, source: str, limit: int):
     Search local library for patterns/workflows.
     """
     grit_cmd = get_grit_cli_path()
-    
+
     # Call grit patterns list
     patterns_cmd = [grit_cmd, "patterns", "list"]
     if language:
@@ -34,7 +35,7 @@ def search_patterns(query: str, language: str, source: str, limit: int):
     patterns_process = subprocess.run(patterns_cmd, capture_output=True, text=True)
     if patterns_process.returncode != 0:
         return {"error": patterns_process.stderr}
-    
+
     patterns = parse_list_output(patterns_process.stdout)
 
     # Call grit list

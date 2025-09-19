@@ -1,8 +1,9 @@
-import subprocess
 import os
+import subprocess
 
 from server.mcp_instance import mcp
 from server.policy import gating
+
 
 def get_grit_cli_path():
     """Returns the path to the grit CLI executable."""
@@ -33,7 +34,7 @@ def find_code(
 
     if language:
         cmd.extend(["--language", language])
-    
+
     # Add -- to prevent parameter injection
     if paths:
         cmd.append("--")

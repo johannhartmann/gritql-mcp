@@ -1,8 +1,8 @@
-import asyncio
-import sys
-import os
-import pytest
 import json
+import os
+import sys
+
+import pytest
 from fastmcp.client import Client
 from fastmcp.client.transports import PythonStdioTransport
 
@@ -15,12 +15,14 @@ GRIT_CLI_PATH = "/home/johann/.nvm/versions/node/v23.9.0/bin/grit"
 @pytest.fixture
 def mcp_client():
     """Fixture to create and configure the MCP client."""
-    server_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../server/main.py'))
-    
+    server_path = os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "../server/main.py")
+    )
+
     # Pass the grit CLI path to the server process
     env = os.environ.copy()
     env["GRIT_CLI_PATH"] = GRIT_CLI_PATH
-    
+
     transport = PythonStdioTransport(script_path=server_path, env=env)
     client = Client(transport)
     return client
