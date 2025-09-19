@@ -1,0 +1,27 @@
+[project]
+name = "gritql-mcp"
+version = "0.1.0"
+description = "A FastMCP server for GritQL."
+dependencies = [
+    "fastmcp",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-mock",
+    "ruff",
+]
+
+[tool.ruff]
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+addopts = "-ra -q"
+testpaths = [
+    "tests",
+]
