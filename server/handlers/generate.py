@@ -1,3 +1,7 @@
+from server.mcp_instance import mcp
+
+
+@mcp.tool("gritql.generate")
 def generate_gritql(
     problem: str, intent: str, language: str, constraints: list[str] = None
 ):

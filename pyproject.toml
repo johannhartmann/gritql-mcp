@@ -11,6 +11,7 @@ dev = [
     "pytest",
     "pytest-mock",
     "ruff",
+    "pytest-asyncio",
 ]
 
 [tool.ruff]

@@ -1,18 +1,19 @@
-import json
 import subprocess
+import os
 
+from server.mcp_instance import mcp
 from server.policy import gating
 
+def get_grit_cli_path():
+    """Returns the path to the grit CLI executable."""
+    return os.environ.get("GRIT_CLI_PATH", "grit")
 
+@mcp.tool("code.find")
 def find_code(
     gritql: str = None,
     patternName: str = None,
     language: str = None,
-    includeGlobs: list[str] = None,
-    excludeGlobs: list[str] = None,
     paths: list[str] = None,
-    maxFiles: int = None,
-    maxMatchesPerFile: int = None,
 ):
     """
     Find matches in the workspace (no writes).
@@ -24,15 +25,14 @@ def find_code(
     if language and not gating.is_allowed_language(language):
         return {"error": f"Language is not allowed: {language}"}
 
+    grit_cmd = get_grit_cli_path()
     pattern = gritql if gritql else patternName
-    cmd = ["grit", "apply", pattern, "--dry-run", "--jsonl"]
+    # The `check` command is more appropriate for finding matches without applying them.
+    # It is also more likely to have a structured output format in the future.
+    cmd = [grit_cmd, "check", pattern]
 
     if language:
         cmd.extend(["--language", language])
-    if includeGlobs:
-        cmd.extend(["--include", ",".join(includeGlobs)])
-    if excludeGlobs:
-        cmd.extend(["--exclude", ",".join(excludeGlobs)])
     
     # Add -- to prevent parameter injection
     if paths:
@@ -43,10 +43,5 @@ def find_code(
     if process.returncode != 0:
         return {"error": process.stderr}
 
-    # Parse the JSONL output
-    matches = []
-    for line in process.stdout.strip().split("\n"):
-        if line:
-            matches.append(json.loads(line))
-
-    return {"matches": matches}
+    # Since there's no JSON output, return the raw stdout
+    return {"output": process.stdout}

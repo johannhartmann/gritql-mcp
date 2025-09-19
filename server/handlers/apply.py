@@ -1,15 +1,18 @@
-import json
 import subprocess
+import os
 
+from server.mcp_instance import mcp
 from server.policy import gating
 
+def get_grit_cli_path():
+    """Returns the path to the grit CLI executable."""
+    return os.environ.get("GRIT_CLI_PATH", "grit")
 
+@mcp.tool("code.apply")
 def apply_code(
     gritql: str = None,
     patternName: str = None,
     language: str = None,
-    includeGlobs: list[str] = None,
-    excludeGlobs: list[str] = None,
     paths: list[str] = None,
 ):
     """
@@ -22,15 +25,12 @@ def apply_code(
     if language and not gating.is_allowed_language(language):
         return {"error": f"Language is not allowed: {language}"}
 
+    grit_cmd = get_grit_cli_path()
     pattern = gritql if gritql else patternName
-    cmd = ["grit", "apply", pattern, "--jsonl"]
+    cmd = [grit_cmd, "apply", pattern]
 
     if language:
         cmd.extend(["--language", language])
-    if includeGlobs:
-        cmd.extend(["--include", ",".join(includeGlobs)])
-    if excludeGlobs:
-        cmd.extend(["--exclude", ",".join(excludeGlobs)])
     
     # Add -- to prevent parameter injection
     if paths:
@@ -41,20 +41,5 @@ def apply_code(
     if process.returncode != 0:
         return {"error": process.stderr}
 
-    # Process the JSONL output to summarize the results
-    total_changes = 0
-    changed_files = set()
-    for line in process.stdout.strip().split("\n"):
-        if not line:
-            continue
-        match = json.loads(line)
-        total_changes += 1
-        file_path = match.get("path")
-        if file_path:
-            changed_files.add(file_path)
-
-    return {
-        "filesChanged": len(changed_files),
-        "totalChanges": total_changes,
-        "changedFiles": list(changed_files),
-    }
+    # Since there's no JSON output, return the raw stdout
+    return {"output": process.stdout}
