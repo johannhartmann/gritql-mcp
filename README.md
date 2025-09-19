@@ -23,7 +23,19 @@ Before you begin, ensure you have the following installed:
 
 1.  **Python** (3.8 or higher)
 2.  **uv**: Follow the official installation instructions at [astral.sh/uv](https://astral.sh/uv).
-3.  **Grit CLI**: Follow the official installation instructions at [docs.grit.io/cli/quickstart](https://docs.grit.io/cli/quickstart).
+3.  **Grit CLI**: You can install the Grit CLI using either `npm` or a `curl` script. For more details, see the [official quickstart guide](https://docs.grit.io/cli/quickstart).
+
+    *   **npm**
+
+        ```bash
+        npm install --location=global @getgrit/cli
+        ```
+
+    *   **curl**
+
+        ```bash
+        curl -fsSL https://docs.grit.io/install | bash
+        ```
 4.  **An MCP-compatible client** (e.g., Gemini CLI).
 
 ## Installation
