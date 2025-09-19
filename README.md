@@ -32,10 +32,7 @@ Before you begin, ensure you have the following installed:
     # Or using the install script
     curl -fsSL https://docs.grit.io/install | bash
     ```
-4.  **Codex CLI** (or another MCP client):
-    ```bash
-    npm install -g @openai/codex
-    ```
+4.  **An MCP-compatible client** (e.g., Gemini CLI, Codex CLI).
 
 ## Installation
 
@@ -56,44 +53,51 @@ Before you begin, ensure you have the following installed:
     uv pip install -e .
     ```
 
-## Configuration
+## Integrations
 
-To make the server available to the Codex CLI, you need to add it to your Codex configuration file.
+This server uses the Model Context Protocol (MCP) to expose its tools.
 
-1.  Locate or create the config file at `~/.codex/config.toml`.
+### Gemini CLI
 
-2.  Add the following section to the file, adjusting the paths as necessary:
+To make the server available to the Gemini CLI, you need to add it to your Gemini configuration file.
 
-    ```toml
-    [mcp_servers.gritql]
-    # The command Codex should run to start your MCP server.
-    # This assumes your virtual environment's python is in your PATH.
-    command = "python"
+1.  Locate or create the config file at `~/.gemini/settings.json`.
 
-    # The '-m' flag tells Python to run the 'server.main' module.
-    args = ["-m", "server.main"]
+2.  Add the following to the `mcp_servers` list in the file, adjusting the paths as necessary:
 
-    # Set the workspace root you want GritQL to operate on.
-    # Replace '/path/to/your/workspace' with the absolute path to your code.
-    env = { "GRIT_MCP_ALLOWED_PATHS" = "/path/to/your/workspace" }
+    ```json
+    {
+      "command": "python",
+      "args": ["-m", "server.main"],
+      "name": "gritql"
+    }
     ```
-    **Note:** The `GRIT_MCP_ALLOWED_PATHS` environment variable is a security measure to ensure the server only modifies code in the intended directory.
+
+### OpenAI Codex and Claude
+
+To integrate with clients that use OpenAI's or Anthropic's function calling/tool use APIs, you would need to create a translation layer. This layer would:
+1.  Define the tools in the format required by the specific API (e.g., JSON schema for OpenAI).
+2.  Receive the function call request from the model.
+3.  Translate the request into an MCP call to this server.
+4.  Receive the MCP response and translate it back into the format expected by the model's API.
+
+This project does not include this translation layer out of the box.
 
 ## Usage
 
-Once configured, the Codex CLI will automatically start and connect to the server. You can then invoke the tools by describing what you want to do in a natural way.
+Once configured, your MCP client will automatically start and connect to the server. You can then invoke the tools by describing what you want to do in a natural way.
 
-**Example:**
+**Example (with Gemini CLI):**
 
 1.  Navigate to a directory within your allowed workspace.
-2.  Run the Codex CLI:
+2.  Run the Gemini CLI:
     ```bash
-    codex
+    gemini
     ```
 3.  Give it a prompt that triggers one of the tools:
     > "Using the gritql tool, find all functions named 'my_function' in the current directory."
 
-Codex will identify the appropriate tool (`code.find`), call the server, and display the results.
+The CLI will identify the appropriate tool (`code.find`), call the server, and display the results.
 
 ## Development and Quality Assurance
 

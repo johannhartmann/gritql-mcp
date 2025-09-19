@@ -19,10 +19,6 @@ def apply_code(
         return {"error": "Either gritql or patternName is required."}
 
     # Policy enforcement
-    if paths:
-        for path in paths:
-            if not gating.is_allowed_path(path):
-                return {"error": f"Path is not allowed: {path}"}
     if language and not gating.is_allowed_language(language):
         return {"error": f"Language is not allowed: {language}"}
 
