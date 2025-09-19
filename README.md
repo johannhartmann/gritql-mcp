@@ -1,1 +1,0 @@
-# gritql-mcp
