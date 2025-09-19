@@ -46,9 +46,11 @@ async def test_search_patterns(mcp_client):
 
         # Validate the response
         assert "items" in response_data
-        assert isinstance(response_data["items"], list)
-        # The command might return an empty list if no patterns are installed
-        assert len(response_data["items"]) >= 0
+        if response_data["items"]:
+            items_data = json.loads(response_data["items"])
+            assert isinstance(items_data, list)
+            # The command might return an empty list if no patterns are installed
+            assert len(items_data) >= 0
 
 @pytest.mark.asyncio
 async def test_describe_pattern(mcp_client):

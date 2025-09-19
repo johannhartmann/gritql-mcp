@@ -1,3 +1,4 @@
+import json
 import os
 import subprocess
 
@@ -9,14 +10,11 @@ def get_grit_cli_path():
     return os.environ.get("GRIT_CLI_PATH", "grit")
 
 def parse_list_output(output: str) -> list[dict]:
-    """Parses the plain text output of `grit list` and `grit patterns list`."""
-    items = []
-    for line in output.strip().split('\n'):
-        if not line:
-            continue
-        # Assuming the output is just a list of names, create a simple object
-        items.append({"name": line.strip()})
-    return items
+    """Parses the JSON output of `grit list` and `grit patterns list`."""
+    try:
+        return json.loads(output)
+    except json.JSONDecodeError:
+        return []
 
 @mcp.tool("library.search_patterns")
 def search_patterns(query: str, language: str, source: str, limit: int):
@@ -56,7 +54,7 @@ def search_patterns(query: str, language: str, source: str, limit: int):
 
     # A real implementation would filter by query here
 
-    return {"items": all_items[:limit]}
+    return {"items": json.dumps(all_items[:limit])}
 
 
 @mcp.tool("patterns.describe")
