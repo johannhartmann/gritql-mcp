@@ -2,7 +2,11 @@
 Execution mode support for Container Use integration.
 """
 
-from typing import Any, Dict, List, Optional
+import logging
+from typing import Any, Dict, List, Optional, Tuple
+
+import docker
+from docker.errors import APIError, ContainerError, NotFound
 
 
 def parse_execution_target(
@@ -140,39 +144,137 @@ def build_container_command(
     }
 
 
+def execute_in_container(
+    env_id: str,
+    command: str,
+    working_dir: str = "/workspace",
+) -> Tuple[int, str, str]:
+    """
+    Execute a command inside a Container Use environment using Docker SDK.
+
+    Args:
+        env_id: Container environment ID
+        command: Command to execute
+        working_dir: Working directory inside container
+
+    Returns:
+        Tuple of (returncode, stdout, stderr)
+    """
+    # Container Use environments are Docker containers with specific naming
+    # The container name follows the pattern: container-use-env-{env_id}
+    container_name = f"container-use-env-{env_id}"
+
+    try:
+        # Connect to Docker daemon
+        client = docker.from_env()
+
+        # Get the container
+        try:
+            container = client.containers.get(container_name)
+        except NotFound:
+            return (
+                1,
+                "",
+                f"Container {container_name} not found. "
+                f"Ensure the Container Use environment exists.",
+            )
+
+        # Check if container is running
+        if container.status != "running":
+            return (
+                1,
+                "",
+                f"Container {container_name} is not running "
+                f"(status: {container.status})",
+            )
+
+        # Execute command inside container
+        # Note: exec_run returns ExecResult with exit_code and output attributes
+        result = container.exec_run(
+            cmd=["sh", "-c", command],
+            workdir=working_dir,
+            demux=True,  # Separate stdout and stderr
+            tty=False,
+        )
+
+        # Handle the result
+        exit_code = result.exit_code
+
+        # demux=True returns tuple (stdout, stderr) or None if stream empty
+        if result.output:
+            stdout = result.output[0].decode("utf-8") if result.output[0] else ""
+            stderr = result.output[1].decode("utf-8") if result.output[1] else ""
+        else:
+            stdout = ""
+            stderr = ""
+
+        return exit_code, stdout, stderr
+
+    except APIError as e:
+        # Docker API errors (connection issues, daemon problems)
+        logging.error(f"Docker API error: {e}")
+        error_msg = e.explanation if hasattr(e, "explanation") else str(e)
+        return (
+            1,
+            "",
+            f"Docker API error: {error_msg}",
+        )
+    except ContainerError as e:
+        # Container-specific errors during execution
+        logging.error(f"Container execution error: {e}")
+        return 1, "", f"Container execution failed: {str(e)}"
+    except Exception as e:
+        # Catch-all for unexpected errors
+        logging.error(f"Unexpected error executing in container: {e}")
+        return 1, "", f"Failed to execute in container: {str(e)}"
+
+
 def format_container_response(
-    command_spec: Dict[str, Any], risk_metadata: Dict[str, Any], env_id: str
+    execution_result: Dict[str, Any],
+    risk_metadata: Dict[str, Any],
+    env_id: str,
+    operation: str,
 ) -> Dict[str, Any]:
     """
     Format response for container mode execution.
 
     Args:
-        command_spec: Command specification
+        execution_result: Result from container execution
         risk_metadata: Risk assessment metadata
         env_id: Container environment ID
+        operation: Type of operation (apply/dry_run)
 
     Returns:
         Formatted response for agent consumption
     """
-    return {
+    success = execution_result.get("returncode", 1) == 0
+
+    response = {
         "execution_mode": "container_use",
         "env_id": env_id,
-        "instructions": {
-            "command": command_spec["command"],
-            "working_dir": command_spec["working_dir"],
-            "expected_artifacts": [
-                "stdout output from grit command",
-                f"repository diff via: container-use diff {env_id}",
-            ],
-            "operation": command_spec["operation"],
-        },
+        "operation": operation,
+        "success": success,
         "risk_assessment": risk_metadata,
-        "next_steps": {
-            "execute": f"Use environment_run_cmd to run: {command_spec['command']}",
+    }
+
+    if success:
+        response["output"] = execution_result.get("stdout", "")
+        response["message"] = f"Successfully executed {operation} in container {env_id}"
+        response["next_steps"] = {
             "review": f"Use 'container-use diff {env_id}' to review changes",
+            "test": "Run tests in container to verify changes",
             "land": (
                 f"Use 'container-use merge {env_id}' or "
                 f"'container-use apply {env_id}' to accept changes"
             ),
-        },
-    }
+        }
+    else:
+        response["error"] = execution_result.get("stderr", "Unknown error")
+        response["message"] = f"Failed to execute {operation} in container"
+        response["troubleshooting"] = {
+            "check_container": f"Verify container {env_id} is running",
+            "check_grit": "Ensure grit CLI is installed in the container",
+            "check_path": "Verify working directory exists in container",
+        }
+
+    return response

@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "A FastMCP server for GritQL."
 dependencies = [
     "fastmcp",
+    "docker",
 ]
 
 [project.optional-dependencies]

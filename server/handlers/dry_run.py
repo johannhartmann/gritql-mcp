@@ -5,6 +5,7 @@ from typing import Any, Dict, Optional
 from server.execution_mode import (
     build_container_command,
     estimate_impact,
+    execute_in_container,
     format_container_response,
     parse_execution_target,
 )
@@ -55,7 +56,7 @@ def dry_run_code(
     except ValueError as e:
         return {"error": str(e)}
 
-    # Container mode: return command specification
+    # Container mode: execute inside container
     if exec_mode["type"] == "container_use":
         # Build command and estimate impact
         command_spec = build_container_command(
@@ -67,10 +68,25 @@ def dry_run_code(
         )
         risk_metadata = estimate_impact(pattern, language, paths)
 
+        # Execute the command inside the container
+        returncode, stdout, stderr = execute_in_container(
+            env_id=exec_mode["env_id"],
+            command=command_spec["command"],
+            working_dir=command_spec["working_dir"],
+        )
+
+        # Format and return the execution result
+        execution_result = {
+            "returncode": returncode,
+            "stdout": stdout,
+            "stderr": stderr,
+        }
+
         return format_container_response(
-            command_spec=command_spec,
+            execution_result=execution_result,
             risk_metadata=risk_metadata,
             env_id=exec_mode["env_id"],
+            operation="dry_run",
         )
 
     # Host mode: execute directly (existing behavior)

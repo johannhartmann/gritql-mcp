@@ -13,6 +13,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../"
 from server.execution_mode import (
     build_container_command,
     estimate_impact,
+    execute_in_container,
     format_container_response,
     parse_execution_target,
 )
@@ -106,62 +107,125 @@ def test_build_container_command_dry_run():
     assert cmd["operation"] == "dry_run"
 
 
-def test_format_container_response():
-    """Test formatting container response."""
-    command_spec = {
-        "command": "grit apply pattern",
-        "working_dir": "/app",
-        "operation": "apply",
+def test_format_container_response_success():
+    """Test formatting successful container response."""
+    execution_result = {
+        "returncode": 0,
+        "stdout": "Applied pattern successfully",
+        "stderr": "",
     }
     risk_metadata = {"risk_level": "medium", "scope": "targeted"}
-    response = format_container_response(command_spec, risk_metadata, "env789")
+    response = format_container_response(
+        execution_result, risk_metadata, "env789", "apply"
+    )
 
     assert response["execution_mode"] == "container_use"
     assert response["env_id"] == "env789"
-    assert response["instructions"]["command"] == "grit apply pattern"
-    assert response["instructions"]["working_dir"] == "/app"
+    assert response["operation"] == "apply"
+    assert response["success"] is True
+    assert response["output"] == "Applied pattern successfully"
     assert response["risk_assessment"] == risk_metadata
-    assert "execute" in response["next_steps"]
     assert "review" in response["next_steps"]
+    assert "test" in response["next_steps"]
     assert "land" in response["next_steps"]
 
 
-def test_container_mode_response_format():
-    """Test the format of container mode response."""
-    # Test building container command and response for apply
-    command_spec = build_container_command(
-        pattern="test_pattern",
-        dry_run=False,
-        language="python",
-        paths=["test.py"],
-        cwd="/workspace",
+def test_format_container_response_failure():
+    """Test formatting failed container response."""
+    execution_result = {
+        "returncode": 1,
+        "stdout": "",
+        "stderr": "Pattern not found",
+    }
+    risk_metadata = {"risk_level": "low", "scope": "targeted"}
+    response = format_container_response(
+        execution_result, risk_metadata, "env_fail", "dry_run"
     )
-    risk_metadata = estimate_impact("test_pattern", "python", ["test.py"])
-    response = format_container_response(command_spec, risk_metadata, "test_env")
 
     assert response["execution_mode"] == "container_use"
-    assert response["env_id"] == "test_env"
-    assert "grit apply" in response["instructions"]["command"]
-    assert response["instructions"]["working_dir"] == "/workspace"
-    assert response["instructions"]["operation"] == "apply"
-    assert "risk_assessment" in response
+    assert response["env_id"] == "env_fail"
+    assert response["operation"] == "dry_run"
+    assert response["success"] is False
+    assert response["error"] == "Pattern not found"
+    assert "troubleshooting" in response
+    assert "check_container" in response["troubleshooting"]
+    assert "check_grit" in response["troubleshooting"]
 
 
-def test_dry_run_container_mode_response_format():
-    """Test the format of container mode dry run response."""
-    # Test building container command and response for dry run
-    command_spec = build_container_command(
-        pattern="standard_pattern",
-        dry_run=True,
-        language="python",
-        paths=["test.py"],
-        cwd=".",
+def test_execute_in_container_success(mocker):
+    """Test successful command execution in container using docker-py."""
+    # Mock docker client and container
+    mock_docker = mocker.patch("docker.from_env")
+    mock_client = mocker.MagicMock()
+    mock_docker.return_value = mock_client
+
+    # Mock container
+    mock_container = mocker.MagicMock()
+    mock_container.status = "running"
+    mock_client.containers.get.return_value = mock_container
+
+    # Mock exec_run result
+    mock_result = mocker.MagicMock()
+    mock_result.exit_code = 0
+    mock_result.output = (b"Command output", b"")
+    mock_container.exec_run.return_value = mock_result
+
+    returncode, stdout, stderr = execute_in_container(
+        env_id="test123", command="grit apply pattern", working_dir="/workspace"
     )
-    risk_metadata = estimate_impact("standard_pattern", "python", ["test.py"])
-    response = format_container_response(command_spec, risk_metadata, "dry_env")
 
-    assert response["execution_mode"] == "container_use"
-    assert response["env_id"] == "dry_env"
-    assert "--dry-run" in response["instructions"]["command"]
-    assert response["instructions"]["operation"] == "dry_run"
-    assert response["risk_assessment"]["scope"] == "targeted"
+    assert returncode == 0
+    assert stdout == "Command output"
+    assert stderr == ""
+
+    # Verify container was fetched and command was executed
+    mock_client.containers.get.assert_called_once_with("container-use-env-test123")
+    mock_container.exec_run.assert_called_once_with(
+        cmd=["sh", "-c", "grit apply pattern"],
+        workdir="/workspace",
+        demux=True,
+        tty=False,
+    )
+
+
+def test_execute_in_container_not_found(mocker):
+    """Test handling when container doesn't exist."""
+    # Mock docker client to raise NotFound
+    mock_docker = mocker.patch("docker.from_env")
+    mock_client = mocker.MagicMock()
+    mock_docker.return_value = mock_client
+
+    from docker.errors import NotFound
+
+    mock_client.containers.get.side_effect = NotFound("Container not found")
+
+    returncode, stdout, stderr = execute_in_container(
+        env_id="missing", command="grit apply pattern"
+    )
+
+    assert returncode == 1
+    assert stdout == ""
+    assert "not found" in stderr
+    assert "Container Use environment exists" in stderr
+
+
+def test_execute_in_container_not_running(mocker):
+    """Test handling when container is not running."""
+    # Mock docker client and container
+    mock_docker = mocker.patch("docker.from_env")
+    mock_client = mocker.MagicMock()
+    mock_docker.return_value = mock_client
+
+    # Mock container that's not running
+    mock_container = mocker.MagicMock()
+    mock_container.status = "exited"
+    mock_client.containers.get.return_value = mock_container
+
+    returncode, stdout, stderr = execute_in_container(
+        env_id="stopped", command="grit apply pattern"
+    )
+
+    assert returncode == 1
+    assert stdout == ""
+    assert "not running" in stderr
+    assert "status: exited" in stderr

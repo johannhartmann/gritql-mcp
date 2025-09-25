@@ -22,12 +22,13 @@ The server exposes the following tools to the client, acting as a wrapper around
 The `code.apply` and `code.dry_run` tools support an optional `execution_target` parameter for integration with [Container Use](https://container-use.com):
 
 -   **Host Mode** (default): Executes commands directly on the host filesystem
--   **Container Mode**: Returns command specifications for isolated execution via Container Use MCP
+-   **Container Mode**: Executes commands inside Container Use environments and returns results
 
-When using Container Mode, the tools return:
--   Exact shell commands to run in the container
--   Risk assessment metadata (scope, impact level, affected languages)
--   Instructions for reviewing and landing changes
+When using Container Mode, the tools:
+-   Execute grit commands directly inside the specified container
+-   Return actual transformation results (stdout/stderr from grit)
+-   Include risk assessment metadata (scope, impact level, affected languages)
+-   Provide troubleshooting information if execution fails
 
 This allows agents to safely test and apply code transformations in isolated environments before committing changes.
 
@@ -120,8 +121,8 @@ This section explains how to use gritql-mcp with Container Use for safe, isolate
 
 The integration follows a responsibility split model:
 
-- **gritql-mcp** (on host): Handles pattern discovery, planning, risk assessment, and command generation
-- **Container Use** (isolated environment): Creates containers, executes commands, generates diffs, and lands changes
+- **gritql-mcp** (on host): Handles pattern discovery and executes transformations inside containers via Docker
+- **Container Use** (isolated environment): Manages container lifecycle, tracks changes, and handles landing
 - **Agent** (orchestrator): Coordinates both servers to safely apply transformations
 
 ### Installation Requirements
@@ -229,13 +230,13 @@ await client.call_tool("environment_run_cmd", {
 })
 ```
 
-#### 3. Planning Phase (Host → Container)
+#### 3. Execution Phase (Host → Container)
 
-Get transformation plan from gritql-mcp in container mode:
+Execute transformations directly in the container via gritql-mcp:
 
 ```python
-# Get dry run plan with risk assessment
-plan = await client.call_tool("code.dry_run", {
+# Execute dry run in container with risk assessment
+result = await client.call_tool("code.dry_run", {
     "patternName": "react_to_hooks",
     "paths": ["src/components"],
     "execution_target": {
@@ -245,28 +246,38 @@ plan = await client.call_tool("code.dry_run", {
     }
 })
 
-# Examine the response
-print(f"Risk Level: {plan['risk_assessment']['risk_level']}")
-print(f"Scope: {plan['risk_assessment']['scope']}")
-print(f"Command to run: {plan['instructions']['command']}")
+# Check the result
+if result["success"]:
+    print(f"Preview: {result['output']}")
+    print(f"Risk Level: {result['risk_assessment']['risk_level']}")
+    print(f"Scope: {result['risk_assessment']['scope']}")
+else:
+    print(f"Error: {result['error']}")
+    print(f"Troubleshooting: {result['troubleshooting']}")
 ```
 
-#### 4. Execution Phase (Container)
+#### 4. Apply Changes (If Approved)
 
-Execute the transformation in the isolated environment:
+If the dry run looks good, apply the actual changes:
 
 ```python
-# Run the grit command in container
-result = await client.call_tool("environment_run_cmd", {
-    "env_id": env_id,
-    "command": plan["instructions"]["command"],
-    "working_dir": plan["instructions"]["working_dir"]
+# Apply the transformation in container
+result = await client.call_tool("code.apply", {
+    "patternName": "react_to_hooks",
+    "paths": ["src/components"],
+    "execution_target": {
+        "type": "container_use",
+        "env_id": env_id,
+        "cwd": "/workspace"
+    }
 })
 
-# Review the diff
-diff = await client.call_tool("environment_diff", {
-    "env_id": env_id
-})
+if result["success"]:
+    print(f"Applied: {result['output']}")
+    # Review the diff
+    diff = await client.call_tool("environment_diff", {
+        "env_id": env_id
+    })
 ```
 
 #### 5. Review & Land Phase (Container → Host)
