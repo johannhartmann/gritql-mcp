@@ -1,9 +1,12 @@
 # Import handlers to register the tools via decorators
-from server.handlers import apply
-from server.handlers import dry_run
-from server.handlers import find
-from server.handlers import generate
-from server.handlers import library
+# These imports are needed to register the tools, even though they're not directly used
+from server.handlers import (
+    apply,  # noqa: F401
+    dry_run,  # noqa: F401
+    find,  # noqa: F401
+    generate,  # noqa: F401
+    library,  # noqa: F401
+)
 from server.mcp_instance import mcp
 
 

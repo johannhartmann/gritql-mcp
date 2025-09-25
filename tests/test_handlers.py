@@ -1,8 +1,7 @@
 import json
 import subprocess
 
-from server.handlers import library
-from server.handlers import generate
+from server.handlers import generate, library
 
 
 def test_search_patterns_success(mocker):
@@ -67,12 +66,17 @@ def test_generate_gritql_find_named_function():
         constraints=[],
     )
     assert result["gritql"] == "`function_definition(name='my_function')`"
-    assert "find function definitions with the name 'my_function'" in result["rationale"]
+    assert (
+        "find function definitions with the name 'my_function'" in result["rationale"]
+    )
 
 
 def test_generate_gritql_remove_console_log():
     result = generate.generate_gritql.fn(
-        problem="remove console.log", intent="remove", language="javascript", constraints=[]
+        problem="remove console.log",
+        intent="remove",
+        language="javascript",
+        constraints=[],
     )
     assert result["gritql"] == "`console.log($args)` => ``"
     assert "remove `console.log` statements" in result["rationale"]

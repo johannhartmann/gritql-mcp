@@ -17,6 +17,20 @@ The server exposes the following tools to the client, acting as a wrapper around
 
 **Note:** This server parses the human-readable output of the `grit` CLI, as the tool does not yet support structured (JSON) output for these commands.
 
+### Container Use Integration
+
+The `code.apply` and `code.dry_run` tools support an optional `execution_target` parameter for integration with [Container Use](https://container-use.com):
+
+-   **Host Mode** (default): Executes commands directly on the host filesystem
+-   **Container Mode**: Returns command specifications for isolated execution via Container Use MCP
+
+When using Container Mode, the tools return:
+-   Exact shell commands to run in the container
+-   Risk assessment metadata (scope, impact level, affected languages)
+-   Instructions for reviewing and landing changes
+
+This allows agents to safely test and apply code transformations in isolated environments before committing changes.
+
 ## Prerequisites
 
 Before you begin, ensure you have the following installed:

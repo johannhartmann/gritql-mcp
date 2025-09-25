@@ -1,6 +1,13 @@
 import os
 import subprocess
+from typing import Any, Dict, Optional
 
+from server.execution_mode import (
+    build_container_command,
+    estimate_impact,
+    format_container_response,
+    parse_execution_target,
+)
 from server.mcp_instance import mcp
 from server.policy import gating
 
@@ -9,15 +16,27 @@ def get_grit_cli_path():
     """Returns the path to the grit CLI executable."""
     return os.environ.get("GRIT_CLI_PATH", "grit")
 
+
 @mcp.tool("code.dry_run")
 def dry_run_code(
-    gritql: str = None,
-    patternName: str = None,
-    language: str = None,
-    paths: list[str] = None,
+    gritql: Optional[str] = None,
+    patternName: Optional[str] = None,
+    language: Optional[str] = None,
+    paths: Optional[list[str]] = None,
+    execution_target: Optional[Dict[str, Any]] = None,
 ):
     """
     Summarize the impact of a rewrite without diffs.
+
+    Args:
+        gritql: GritQL pattern to apply
+        patternName: Name of predefined pattern to apply
+        language: Target language
+        paths: Specific paths to target
+        execution_target: Execution mode configuration
+            - {"type": "host"}: Execute directly on host (default)
+            - {"type": "container_use", "env_id": "<id>", "cwd": "<path>"}:
+              Return command for Container Use execution
     """
     if not gritql and not patternName:
         return {"error": "Either gritql or patternName is required."}
@@ -26,8 +45,36 @@ def dry_run_code(
     if language and not gating.is_allowed_language(language):
         return {"error": f"Language is not allowed: {language}"}
 
-    grit_cmd = get_grit_cli_path()
     pattern = gritql if gritql else patternName
+    if pattern is None:  # This should never happen due to earlier validation
+        return {"error": "No pattern specified"}
+
+    # Parse execution mode
+    try:
+        exec_mode = parse_execution_target(execution_target)
+    except ValueError as e:
+        return {"error": str(e)}
+
+    # Container mode: return command specification
+    if exec_mode["type"] == "container_use":
+        # Build command and estimate impact
+        command_spec = build_container_command(
+            pattern=pattern,
+            dry_run=True,  # This is a dry run
+            language=language,
+            paths=paths,
+            cwd=exec_mode["cwd"],
+        )
+        risk_metadata = estimate_impact(pattern, language, paths)
+
+        return format_container_response(
+            command_spec=command_spec,
+            risk_metadata=risk_metadata,
+            env_id=exec_mode["env_id"],
+        )
+
+    # Host mode: execute directly (existing behavior)
+    grit_cmd = get_grit_cli_path()
     cmd = [grit_cmd, "apply", pattern, "--dry-run"]
 
     if language:
